@@ -6,9 +6,10 @@ interface CompletionCelebrationProps {
   onNextDay: () => void;
   onClose: () => void;
   isLastDay: boolean;
+  isToday?: boolean;
 }
 
-export function CompletionCelebration({ onNextDay, onClose, isLastDay }: CompletionCelebrationProps) {
+export function CompletionCelebration({ onNextDay, onClose, isLastDay, isToday = true }: CompletionCelebrationProps) {
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.9 }}
@@ -47,7 +48,9 @@ export function CompletionCelebration({ onNextDay, onClose, isLastDay }: Complet
           <p className="text-muted-foreground">
             {isLastDay
               ? "Amazing work! You've completed all tasks for this week. Your consistency is paying off!"
-              : "Great job! You've completed all tasks for today. Come back tomorrow for new challenges!"}
+              : isToday
+                ? "Great job! You've completed all tasks for today. Come back tomorrow for new challenges!"
+                : "Your next day is ready! Let's keep the momentum going."}
           </p>
         </div>
 
@@ -57,7 +60,7 @@ export function CompletionCelebration({ onNextDay, onClose, isLastDay }: Complet
             className="gradient-bg hover:opacity-90 transition-opacity gap-2"
             size="lg"
           >
-            Start Day {/* Will show next day number */}
+            Start Next Day
             <ArrowRight className="h-4 w-4" />
           </Button>
         )}

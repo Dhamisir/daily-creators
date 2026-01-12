@@ -26,30 +26,32 @@ export default function Dashboard() {
     allTasksCompleted,
     advanceToNextDay,
     isAuthenticated,
+    isToday,
   } = useTasks(slug);
 
   const [selectedDayNum, setSelectedDayNum] = useState<number | null>(null);
   const [showCelebration, setShowCelebration] = useState(false);
   const [hasShownCelebration, setHasShownCelebration] = useState(false);
 
-  // Set initial selected day when data loads
+  // Keep selected day in sync with active progress
   useEffect(() => {
-    if (userProgress && !selectedDayNum) {
+    if (userProgress) {
       setSelectedDayNum(userProgress.current_day);
     } else if (!isAuthenticated && weeklyPlan && !selectedDayNum) {
       setSelectedDayNum(1);
     }
-  }, [userProgress, weeklyPlan, isAuthenticated, selectedDayNum]);
+  }, [userProgress?.current_day, weeklyPlan, isAuthenticated]);
 
   const activeDayNum = userProgress?.current_day || 1;
   const viewedDay = weeklyPlan?.days_data?.days?.find(d => d.day === (selectedDayNum || activeDayNum)) || currentDay;
 
   useEffect(() => {
-    if (allTasksCompleted && !hasShownCelebration && currentDay) {
+    // Only show celebration automatically if completed TODAY
+    if (allTasksCompleted && !hasShownCelebration && currentDay && isToday) {
       setShowCelebration(true);
       setHasShownCelebration(true);
     }
-  }, [allTasksCompleted, hasShownCelebration, currentDay]);
+  }, [allTasksCompleted, hasShownCelebration, currentDay, isToday]);
 
   // Reset celebration state when day changes
   useEffect(() => {
@@ -58,9 +60,17 @@ export default function Dashboard() {
   }, [userProgress?.current_day]);
 
   const handleNextDay = async () => {
-    const success = await advanceToNextDay();
+    const promise = advanceToNextDay();
+    toast.promise(promise, {
+      loading: 'Unlocking next day...',
+      success: 'Day unlocked! Good luck.',
+      error: 'Failed to advance day. Please try again.',
+    });
+
+    const success = await promise;
     if (success) {
       setShowCelebration(false);
+      setSelectedDayNum(activeDayNum + 1);
     }
   };
 
@@ -69,7 +79,11 @@ export default function Dashboard() {
       toast.error("Please login to access todo flow");
     } else if (selectedDayNum && selectedDayNum > activeDayNum) {
       if (allTasksCompleted) {
-        toast.info("Great job! You've finished today. Come back tomorrow for the next day!");
+        if (isToday) {
+          toast.info("Great job! You've finished today. Come back tomorrow for the next day!");
+        } else {
+          setShowCelebration(true);
+        }
       } else {
         toast.info(`Complete Day ${activeDayNum} first to start this task`);
       }
@@ -105,6 +119,7 @@ export default function Dashboard() {
   const totalTime = tasks.reduce((acc, task) => acc + (task.estimated_time_min || 0), 0);
   const isLastDay = (userProgress?.current_day || 1) >= weeklyPlan.days_data.days.length;
   const isViewingCurrentDay = isAuthenticated && (selectedDayNum === (userProgress?.current_day || 1));
+  const nextDayReady = allTasksCompleted && !isToday && !isLastDay && isViewingCurrentDay;
 
   return (
     <div className="min-h-screen bg-background">
@@ -120,6 +135,21 @@ export default function Dashboard() {
         <div className="max-w-2xl mx-auto space-y-8">
           {/* Day header */}
           <DayHeader day={viewedDay} theme={weeklyPlan.theme} />
+
+          {/* Next Day Ready Action */}
+          {nextDayReady && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="p-6 rounded-2xl bg-primary/10 border border-primary/20 text-center space-y-4"
+            >
+              <h3 className="text-lg font-bold">Your next day is ready! 🚀</h3>
+              <p className="text-sm text-muted-foreground">You finished Day {activeDayNum} yesterday. Ready to level up?</p>
+              <Button onClick={handleNextDay} className="w-full gradient-bg">
+                Start Day {activeDayNum + 1}
+              </Button>
+            </motion.div>
+          )}
 
           {/* Progress section */}
           <motion.div
@@ -155,7 +185,7 @@ export default function Dashboard() {
               <TaskCard
                 key={task.id}
                 task={task}
-                isCompleted={isTaskCompleted(task.id)}
+                isCompleted={isTaskCompleted(task.id, selectedDayNum || activeDayNum)}
                 onToggle={() => toggleTaskCompletion(task.id)}
                 index={index}
                 readOnly={!isViewingCurrentDay}
@@ -174,6 +204,7 @@ export default function Dashboard() {
             onNextDay={handleNextDay}
             onClose={() => setShowCelebration(false)}
             isLastDay={isLastDay}
+            isToday={isToday}
           />
         )}
       </AnimatePresence>

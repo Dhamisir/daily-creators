@@ -148,23 +148,50 @@ export function useTasks(categorySlug?: string) {
         return false;
       }
 
-      const { error } = await supabase.rpc('advance_day');
+      const { error } = await supabase
+        .from('user_progress')
+        .update({
+          current_day: nextDay,
+          last_activity_at: new Date().toISOString()
+        })
+        .eq('user_id', user.id)
+        .eq('weekly_plan_id', weeklyPlan.id);
+
       if (error) throw error;
       return true;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['userProgress', weeklyPlan?.id, user?.id] });
+      // Force refresh of ALL related data
+      queryClient.invalidateQueries({ queryKey: ['userProgress'] });
       queryClient.invalidateQueries({ queryKey: ['completedTasks'] });
+      queryClient.invalidateQueries({ queryKey: ['weeklyPlan'] });
     },
   });
 
   const currentDay = weeklyPlan?.days_data?.days?.find(d => d.day === userProgress?.current_day) || weeklyPlan?.days_data?.days?.[0] || null;
+  const currentDayTasks = currentDay?.tasks || [];
 
-  const isTaskCompleted = (taskId: string) => completedTasks.some(t => t.task_id === taskId);
+  // Check if a specific task is completed on a specific day
+  const isTaskCompleted = (taskId: string, dayNumber?: number) => {
+    const targetDay = dayNumber || userProgress?.current_day || 1;
+    return completedTasks.some(t => t.task_id === taskId && t.day_number === targetDay);
+  };
 
+  // Only consider 'all tasks completed' for the user's CURRENT active day
   const allTasksCompleted = currentDay
-    ? (currentDay.tasks || []).every(task => isTaskCompleted(task.id))
+    ? currentDayTasks.length > 0 && currentDayTasks.every(task => isTaskCompleted(task.id, userProgress?.current_day))
     : false;
+
+  // Determine if today is a different day from the last completion of the CURRENT day
+  const lastCompletionDate = completedTasks
+    .filter(t => t.day_number === userProgress?.current_day)
+    .reduce((latest, t) => {
+      const dt = new Date(t.completed_at);
+      return dt > latest ? dt : latest;
+    }, new Date(0));
+
+  const isToday = lastCompletionDate.getTime() > 0 &&
+    new Date().toDateString() === lastCompletionDate.toDateString();
 
   return {
     weeklyPlan,
@@ -177,6 +204,7 @@ export function useTasks(categorySlug?: string) {
     toggleTaskCompletion: (taskId: string) => toggleTaskMutation.mutate(taskId),
     isTaskCompleted,
     allTasksCompleted,
+    isToday,
     advanceToNextDay: async () => advanceDayMutation.mutateAsync(),
   };
 }
