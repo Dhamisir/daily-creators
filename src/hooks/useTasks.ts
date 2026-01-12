@@ -193,6 +193,17 @@ export function useTasks(categorySlug?: string) {
   const isToday = lastCompletionDate.getTime() > 0 &&
     new Date().toDateString() === lastCompletionDate.toDateString();
 
+  // STRICT LOCK: Check if the PREVIOUS day was completed today
+  const prevDayCompletionDate = completedTasks
+    .filter(t => t.day_number === (userProgress?.current_day || 1) - 1)
+    .reduce((latest, t) => {
+      const dt = new Date(t.completed_at);
+      return dt > latest ? dt : latest;
+    }, new Date(0));
+
+  const finishedPrevDayToday = prevDayCompletionDate.getTime() > 0 &&
+    new Date().toDateString() === prevDayCompletionDate.toDateString();
+
   return {
     weeklyPlan,
     userProgress,
@@ -205,7 +216,8 @@ export function useTasks(categorySlug?: string) {
     isTaskCompleted,
     allTasksCompleted,
     isToday,
+    canAdvance: allTasksCompleted && !isToday,
+    isCurrentDayLocked: finishedPrevDayToday, // This is true if they just advanced today
     advanceToNextDay: async () => advanceDayMutation.mutateAsync(),
   };
 }
-

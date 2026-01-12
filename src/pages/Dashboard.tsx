@@ -27,6 +27,8 @@ export default function Dashboard() {
     advanceToNextDay,
     isAuthenticated,
     isToday,
+    canAdvance,
+    isCurrentDayLocked,
   } = useTasks(slug);
 
   const [selectedDayNum, setSelectedDayNum] = useState<number | null>(null);
@@ -60,6 +62,10 @@ export default function Dashboard() {
   }, [userProgress?.current_day]);
 
   const handleNextDay = async () => {
+    if (!canAdvance) {
+      toast.info("Building consistency takes time! Please come back tomorrow for Day " + (activeDayNum + 1));
+      return;
+    }
     const promise = advanceToNextDay();
     toast.promise(promise, {
       loading: 'Unlocking next day...',
@@ -77,6 +83,8 @@ export default function Dashboard() {
   const handleReadOnlyClick = () => {
     if (!isAuthenticated) {
       toast.error("Please login to access todo flow");
+    } else if (isCurrentDayLocked && (selectedDayNum === activeDayNum)) {
+      toast.info("You've already made great progress today! Day " + activeDayNum + " will unlock tomorrow.");
     } else if (selectedDayNum && selectedDayNum > activeDayNum) {
       if (allTasksCompleted) {
         if (isToday) {
@@ -119,7 +127,8 @@ export default function Dashboard() {
   const totalTime = tasks.reduce((acc, task) => acc + (task.estimated_time_min || 0), 0);
   const isLastDay = (userProgress?.current_day || 1) >= weeklyPlan.days_data.days.length;
   const isViewingCurrentDay = isAuthenticated && (selectedDayNum === (userProgress?.current_day || 1));
-  const nextDayReady = allTasksCompleted && !isToday && !isLastDay && isViewingCurrentDay;
+  const showNextDayAction = allTasksCompleted && !isLastDay && isViewingCurrentDay;
+  const isLocked = isCurrentDayLocked && isViewingCurrentDay;
 
   return (
     <div className="min-h-screen bg-background">
@@ -136,17 +145,44 @@ export default function Dashboard() {
           {/* Day header */}
           <DayHeader day={viewedDay} theme={weeklyPlan.theme} />
 
-          {/* Next Day Ready Action */}
-          {nextDayReady && (
+          {/* Locked State Warning */}
+          {isLocked && (
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="p-6 rounded-2xl bg-primary/10 border border-primary/20 text-center space-y-4"
+              className="p-6 rounded-2xl bg-secondary/30 border border-border text-center space-y-2"
             >
-              <h3 className="text-lg font-bold">Your next day is ready! 🚀</h3>
-              <p className="text-sm text-muted-foreground">You finished Day {activeDayNum} yesterday. Ready to level up?</p>
-              <Button onClick={handleNextDay} className="w-full gradient-bg">
-                Start Day {activeDayNum + 1}
+              <h3 className="text-lg font-bold">Day {activeDayNum} is Locked 🔒</h3>
+              <p className="text-sm text-muted-foreground">
+                You've already completed a day today. Building a creator habit takes patience. Come back tomorrow!
+              </p>
+            </motion.div>
+          )}
+
+          {/* Next Day Action Card */}
+          {showNextDayAction && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className={`p-6 rounded-2xl border text-center space-y-4 ${canAdvance
+                ? "bg-primary/10 border-primary/20"
+                : "bg-secondary/50 border-border opacity-80"
+                }`}
+            >
+              <h3 className="text-lg font-bold">
+                {canAdvance ? "Your next day is ready! 🚀" : "Day Complete! Proper rest is key 🧘"}
+              </h3>
+              <p className="text-sm text-muted-foreground">
+                {canAdvance
+                  ? `You finished Day ${activeDayNum} yesterday. Ready to level up?`
+                  : "Consistency is about daily practice, not speed. Come back tomorrow for Day " + (activeDayNum + 1)}
+              </p>
+              <Button
+                onClick={handleNextDay}
+                className={`w-full ${canAdvance ? "gradient-bg" : "bg-secondary text-secondary-foreground"}`}
+                disabled={!canAdvance}
+              >
+                {canAdvance ? `Start Day ${activeDayNum + 1}` : "Wait for Tomorrow"}
               </Button>
             </motion.div>
           )}
@@ -188,7 +224,7 @@ export default function Dashboard() {
                 isCompleted={isTaskCompleted(task.id, selectedDayNum || activeDayNum)}
                 onToggle={() => toggleTaskCompletion(task.id)}
                 index={index}
-                readOnly={!isViewingCurrentDay}
+                readOnly={!isViewingCurrentDay || isLocked}
                 isAuthenticated={isAuthenticated}
                 onClickReadOnly={handleReadOnlyClick}
               />
